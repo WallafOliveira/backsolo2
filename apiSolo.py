@@ -1,29 +1,29 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import mysql.connector
+import sqlite3
+import os
 import pandas as pd
 from scipy import stats
 
 app = Flask(__name__)
 CORS(app)
 
-# Conectar ao banco de dados MySQL
+# Caminho para o banco de dados SQLite dentro da pasta persistente do Render
+db_path = os.path.join(os.getcwd(), 'data', 'meu_banco.db')
+
+# Função para conectar ao banco de dados SQLite
 def get_db_connection():
-    conn = mysql.connector.connect(
-        host="localhost",
-        user="root",  # Seu usuário do MySQL
-        password="02101418",  # Sua senha do MySQL
-        database="meu_banco"  # Nome do banco de dados
-    )
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row  # Permite acessar as colunas por nome
     return conn
 
 # Rota para obter todos os dados da tabela solo
 @app.route('/api/solo', methods=['GET'])
 def get_solo():
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute("SELECT * FROM solo")
-    dados = cursor.fetchall()
+    dados = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify(dados)
 
@@ -36,7 +36,7 @@ def add_solo():
 
     cursor.execute('''
         INSERT INTO solo (ph, umidade, temperatura, nitrogenio, fosforo, potassio, microbioma)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (data['ph'], data['umidade'], data['temperatura'], data['nitrogenio'], data['fosforo'], data['potassio'], data['microbioma']))
     conn.commit()
     conn.close()
@@ -67,9 +67,9 @@ def get_condicoes_anormais():
     }
 
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute("SELECT * FROM solo")
-    dados = cursor.fetchall()
+    dados = [dict(row) for row in cursor.fetchall()]
     conn.close()
 
     condicoes_anormais = []
@@ -94,19 +94,19 @@ def get_condicoes_anormais():
 @app.route('/api/analise_estatistica', methods=['GET'])
 def analise_estatistica():
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     cursor.execute("SELECT * FROM solo")
-    dados = cursor.fetchall()
+    dados = [dict(row) for row in cursor.fetchall()]
     conn.close()
 
     if not dados:
         return jsonify({"message": "Não há dados para análise."}), 404
-    
+
     df = pd.DataFrame(dados)
     resumo_estatistico = df.describe().to_dict()
 
     correlacoes = df.corr(method='pearson').to_dict()
-    
+
     p_values = {}
     for col in df.columns[1:]:  # Ignorando a coluna 'id'
         _, p_value = stats.pearsonr(df['ph'], df[col])
@@ -120,18 +120,21 @@ def analise_estatistica():
 
 # Inicializar a tabela no banco de dados
 def inicializar_banco():
+    if not os.path.exists(os.path.join(os.getcwd(), 'data')):
+        os.makedirs(os.path.join(os.getcwd(), 'data'))
+
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS solo (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        ph FLOAT,
-        umidade FLOAT,
-        temperatura FLOAT,
-        nitrogenio FLOAT,
-        fosforo FLOAT,
-        potassio FLOAT,
-        microbioma FLOAT
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ph REAL,
+        umidade REAL,
+        temperatura REAL,
+        nitrogenio REAL,
+        fosforo REAL,
+        potassio REAL,
+        microbioma REAL
     )
     ''')
     conn.commit()
