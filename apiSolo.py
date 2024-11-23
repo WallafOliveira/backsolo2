@@ -143,4 +143,5 @@ def inicializar_banco():
 # Inicialização da aplicação
 if __name__ == '__main__':
     inicializar_banco()  # Cria a tabela solo caso ainda não exista
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
