@@ -1,15 +1,14 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
-import os
 import pandas as pd
 from scipy import stats
 
 app = Flask(__name__)
 CORS(app)
 
-# Caminho para o banco de dados SQLite dentro da pasta persistente do Render
-db_path = os.path.join(os.getcwd(), 'data', 'meu_banco.db')
+# Caminho para o arquivo do banco de dados SQLite
+db_path = "meu_banco.db"
 
 # Função para conectar ao banco de dados SQLite
 def get_db_connection():
@@ -17,7 +16,33 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row  # Permite acessar as colunas por nome
     return conn
 
-# Rota para obter todas as condições anormais
+# Rota para obter todos os dados da tabela solo
+@app.route('/api/solo', methods=['GET'])
+def get_solo():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM solo")
+    dados = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify(dados)
+
+# Rota para inserir novos dados do solo no banco de dados
+@app.route('/api/solo', methods=['POST'])
+def add_solo():
+    data = request.get_json()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        INSERT INTO solo (ph, umidade, temperatura, nitrogenio, fosforo, potassio, microbioma)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (data['ph'], data['umidade'], data['temperatura'], data['nitrogenio'], data['fosforo'], data['potassio'], data['microbioma']))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": "Dados inseridos com sucesso"}), 201
+
+# Rota para obter condições anormais e recomendações
 @app.route('/api/condicoes_anormais', methods=['GET'])
 def get_condicoes_anormais():
     faixa_ideal = {
@@ -64,11 +89,36 @@ def get_condicoes_anormais():
 
     return jsonify(condicoes_anormais)
 
-# Função para inicializar o banco de dados e criar a tabela
-def inicializar_banco():
-    if not os.path.exists(os.path.join(os.getcwd(), 'data')):
-        os.makedirs(os.path.join(os.getcwd(), 'data'))
+# Rota para análise estatística dos dados
+@app.route('/api/analise_estatistica', methods=['GET'])
+def analise_estatistica():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM solo")
+    dados = [dict(row) for row in cursor.fetchall()]
+    conn.close()
 
+    if not dados:
+        return jsonify({"message": "Não há dados para análise."}), 404
+
+    df = pd.DataFrame(dados)
+    resumo_estatistico = df.describe().to_dict()
+
+    correlacoes = df.corr(method='pearson').to_dict()
+
+    p_values = {}
+    for col in df.columns[1:]:  # Ignorando a coluna 'id'
+        _, p_value = stats.pearsonr(df['ph'], df[col])
+        p_values[col] = p_value
+
+    return jsonify({
+        "resumo_estatistico": resumo_estatistico,
+        "correlacoes": correlacoes,
+        "p_values": p_values
+    })
+
+# Inicializar a tabela no banco de dados
+def inicializar_banco():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
@@ -86,7 +136,7 @@ def inicializar_banco():
     conn.commit()
     conn.close()
 
-# Inicializar a aplicação
+# Inicialização da aplicação
 if __name__ == '__main__':
-    inicializar_banco()  # Cria a tabela caso ainda não exista
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    inicializar_banco()  # Cria a tabela solo caso ainda não exista
+    app.run(debug=True)
