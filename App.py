@@ -35,6 +35,12 @@ def init_db():
         ''')
         conn.commit()
 
+
+
+@app.route('/')
+def home():
+    return jsonify({"message": "API funcionando corretamente!"})
+
 # Endpoint para cadastrar um novo usuário
 @app.route('/usuarios', methods=['POST'])
 def criar_usuario():
