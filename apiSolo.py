@@ -2,13 +2,16 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
 import os
+import logging
 
 app = Flask(__name__)
 CORS(app)
 
 # Caminho para o banco de dados SQLite dentro da pasta persistente do Render
-# Usando uma variável de ambiente para configurar o caminho
-db_path = os.getenv('DATABASE_URL', os.path.join(os.getcwd(), 'data', 'meu_banco.db'))
+db_path = os.path.join(os.getcwd(), 'data', 'meu_banco.db')
+
+# Configuração de logging
+logging.basicConfig(level=logging.DEBUG)
 
 # Função para conectar ao banco de dados SQLite
 def get_db_connection():
@@ -16,8 +19,8 @@ def get_db_connection():
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row  # Permite acessar as colunas por nome
         return conn
-    except sqlite3.DatabaseError as e:
-        print(f"Erro ao conectar ao banco de dados: {e}")
+    except sqlite3.Error as e:
+        app.logger.error(f"Erro ao conectar ao banco de dados: {e}")
         return None
 
 # Rota para obter todos os dados da tabela solo
@@ -31,16 +34,15 @@ def get_solo():
     cursor.execute("SELECT * FROM solo")
     dados = [dict(row) for row in cursor.fetchall()]
     conn.close()
-
     return jsonify(dados)
 
 # Rota para inserir novos dados do solo no banco de dados
 @app.route('/api/solo', methods=['POST'])
 def add_solo():
     data = request.get_json()
-    print(f"Dados recebidos: {data}")  # Log para verificar os dados recebidos
+    app.logger.debug(f"Dados recebidos: {data}")  # Log para verificar os dados recebidos
 
-    # Verificando se todos os campos necessários estão presentes
+    # Verificar se todos os campos obrigatórios estão presentes
     required_fields = ["ph", "umidade", "temperatura", "nitrogenio", "fosforo", "potassio", "microbioma"]
     if not all(key in data for key in required_fields):
         return jsonify({"error": "Campos obrigatórios ausentes"}), 400
@@ -48,7 +50,7 @@ def add_solo():
     conn = get_db_connection()
     if not conn:
         return jsonify({"error": "Erro ao conectar ao banco de dados"}), 500
-    
+
     try:
         cursor = conn.cursor()
         cursor.execute('''
@@ -58,8 +60,9 @@ def add_solo():
         conn.commit()
         conn.close()
         return jsonify({"message": "Dados inseridos com sucesso"}), 201
-    except sqlite3.DatabaseError as e:
+    except Exception as e:
         conn.close()
+        app.logger.error(f"Erro ao inserir dados: {e}")
         return jsonify({"error": f"Erro ao inserir dados: {str(e)}"}), 500
 
 # Rota para obter condições anormais e recomendações
@@ -88,7 +91,7 @@ def get_condicoes_anormais():
     conn = get_db_connection()
     if not conn:
         return jsonify({"error": "Erro ao conectar ao banco de dados"}), 500
-    
+
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM solo")
     dados = [dict(row) for row in cursor.fetchall()]
