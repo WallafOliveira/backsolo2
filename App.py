@@ -1,25 +1,35 @@
 from flask import Flask, request, jsonify
-import mysql.connector
+import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_cors import CORS
 
 app = Flask(__name__)
 
 # Habilitar CORS para todas as origens
-CORS(app, origins=["http://localhost:3001"])
+CORS(app)
 
-# Configuração do banco de dados
-db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': '02101418',
-    'database': 'meu_banco'
-}
+# Caminho para o banco de dados SQLite
+db_path = "meu_banco.db"
 
 # Função para criar a conexão com o banco de dados
 def get_db_connection():
-    conn = mysql.connector.connect(**db_config)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row  # Para acessar os resultados como dicionários
     return conn
+
+# Função para inicializar o banco de dados
+def init_db():
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                senha TEXT NOT NULL
+            )
+        ''')
+        conn.commit()
 
 # Endpoint para cadastrar um novo usuário
 @app.route('/usuarios', methods=['POST'])
@@ -33,22 +43,18 @@ def criar_usuario():
         # Gerar o hash da senha antes de salvar no banco de dados
         senha_hash = generate_password_hash(senha)
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
 
-        # Inserir o usuário no banco de dados
-        cursor.execute("INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)", 
-                       (nome, email, senha_hash))
-        conn.commit()
-
-        cursor.close()
-        conn.close()
+            # Inserir o usuário no banco de dados
+            cursor.execute("INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)", 
+                           (nome, email, senha_hash))
+            conn.commit()
 
         return jsonify({"message": "Usuário criado com sucesso!"}), 201
 
-    except mysql.connector.Error as err:
-        print(f"Erro no MySQL: {err}")
-        return jsonify({'error': 'Erro ao conectar com o banco de dados'}), 500
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'Email já está em uso'}), 409
     except Exception as e:
         print(f"Erro inesperado: {e}")
         return jsonify({'error': 'Erro inesperado no servidor'}), 500
@@ -61,30 +67,30 @@ def login_usuario():
         email = dados_login['email']
         senha = dados_login['senha']
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
 
-        # Verifica se o email existe
-        cursor.execute("SELECT senha FROM usuarios WHERE email = %s", (email,))
-        resultado = cursor.fetchone()
+            # Verifica se o email existe
+            cursor.execute("SELECT senha FROM usuarios WHERE email = ?", (email,))
+            resultado = cursor.fetchone()
 
-        if resultado is None:
-            return jsonify({'error': 'Usuário não encontrado'}), 404
+            if resultado is None:
+                return jsonify({'error': 'Usuário não encontrado'}), 404
 
-        senha_armazenada = resultado[0]
+            senha_armazenada = resultado['senha']
 
-        # Verifica se a senha fornecida é igual à armazenada no banco (comparação com hash)
-        if not check_password_hash(senha_armazenada, senha):
-            return jsonify({'error': 'Senha incorreta'}), 401
+            # Verifica se a senha fornecida é igual à armazenada no banco (comparação com hash)
+            if not check_password_hash(senha_armazenada, senha):
+                return jsonify({'error': 'Senha incorreta'}), 401
 
-        return jsonify({'message': 'Login bem-sucedido!'}), 200
+            return jsonify({'message': 'Login bem-sucedido!'}), 200
 
-    except mysql.connector.Error as err:
-        print(f"Erro no MySQL: {err}")
-        return jsonify({'error': 'Erro ao conectar com o banco de dados'}), 500
     except Exception as e:
         print(f"Erro inesperado: {e}")
         return jsonify({'error': 'Erro inesperado no servidor'}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # Inicializa o banco de dados antes de iniciar o servidor
+    init_db()
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+

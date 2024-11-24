@@ -1,1 +1,2 @@
 web: python apiSolo.py
+web: python App.py
