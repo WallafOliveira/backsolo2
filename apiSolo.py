@@ -31,6 +31,8 @@ def get_solo():
 @app.route('/api/solo', methods=['POST'])
 def add_solo():
     data = request.get_json()
+    print(f"Dados recebidos: {data}")  # Log para verificar os dados recebidos
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -144,4 +146,3 @@ def inicializar_banco():
 if __name__ == '__main__':
     inicializar_banco()  # Cria a tabela solo caso ainda não exista
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
-
