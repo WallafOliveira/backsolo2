@@ -1,14 +1,15 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
+import os
 import pandas as pd
 from scipy import stats
 
 app = Flask(__name__)
 CORS(app)
 
-# Caminho para o arquivo do banco de dados SQLite
-db_path = "meu_banco.db"
+# Caminho para o banco de dados SQLite dentro da pasta persistente do Render
+db_path = os.path.join(os.getcwd(), 'data', 'meu_banco.db')
 
 # Função para conectar ao banco de dados SQLite
 def get_db_connection():
@@ -30,6 +31,8 @@ def get_solo():
 @app.route('/api/solo', methods=['POST'])
 def add_solo():
     data = request.get_json()
+    print(f"Dados recebidos: {data}")  # Log para verificar os dados recebidos
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -119,6 +122,9 @@ def analise_estatistica():
 
 # Inicializar a tabela no banco de dados
 def inicializar_banco():
+    if not os.path.exists(os.path.join(os.getcwd(), 'data')):
+        os.makedirs(os.path.join(os.getcwd(), 'data'))
+
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
@@ -139,4 +145,4 @@ def inicializar_banco():
 # Inicialização da aplicação
 if __name__ == '__main__':
     inicializar_banco()  # Cria a tabela solo caso ainda não exista
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
