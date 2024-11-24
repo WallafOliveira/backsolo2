@@ -6,8 +6,8 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 
-# Habilitar CORS para todas as origens
-CORS(app)
+
+CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
 
 # Caminho para o banco de dados SQLite
 db_path = "meu_banco.db"
