@@ -6,8 +6,14 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 
+# Permitir apenas o domínio específico e garantir que o método OPTIONS e os cabeçalhos necessários sejam aceitos
+CORS(app, resources={r"/*": {
+    "origins": "http://127.0.0.1:5500",
+    "methods": ["GET", "POST", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization"]
+}})
 
-CORS(app, resources={r"/*": {"origins": "http://127.0.0.1:5500"}})
+# Resto do código...
 
 # Caminho para o banco de dados SQLite
 db_path = "meu_banco.db"
