@@ -36,7 +36,7 @@ def add_solo():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute('''
+    cursor.execute(''' 
         INSERT INTO solo (ph, umidade, temperatura, nitrogenio, fosforo, potassio, microbioma)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (data['ph'], data['umidade'], data['temperatura'], data['nitrogenio'], data['fosforo'], data['potassio'], data['microbioma']))
@@ -92,57 +92,5 @@ def get_condicoes_anormais():
 
     return jsonify(condicoes_anormais)
 
-# Rota para análise estatística dos dados
-@app.route('/api/analise_estatistica', methods=['GET'])
-def analise_estatistica():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM solo")
-    dados = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-
-    if not dados:
-        return jsonify({"message": "Não há dados para análise."}), 404
-
-    df = pd.DataFrame(dados)
-    resumo_estatistico = df.describe().to_dict()
-
-    correlacoes = df.corr(method='pearson').to_dict()
-
-    p_values = {}
-    for col in df.columns[1:]:  # Ignorando a coluna 'id'
-        _, p_value = stats.pearsonr(df['ph'], df[col])
-        p_values[col] = p_value
-
-    return jsonify({
-        "resumo_estatistico": resumo_estatistico,
-        "correlacoes": correlacoes,
-        "p_values": p_values
-    })
-
-# Inicializar a tabela no banco de dados
-def inicializar_banco():
-    if not os.path.exists(os.path.join(os.getcwd(), 'data')):
-        os.makedirs(os.path.join(os.getcwd(), 'data'))
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS solo (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ph REAL,
-        umidade REAL,
-        temperatura REAL,
-        nitrogenio REAL,
-        fosforo REAL,
-        potassio REAL,
-        microbioma REAL
-    )
-    ''')
-    conn.commit()
-    conn.close()
-
-# Inicialização da aplicação
 if __name__ == '__main__':
-    inicializar_banco()  # Cria a tabela solo caso ainda não exista
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
