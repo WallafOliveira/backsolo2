@@ -2,7 +2,8 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
 import os
-import logging
+import pandas as pd
+from scipy import stats
 
 app = Flask(__name__)
 CORS(app)
@@ -10,26 +11,16 @@ CORS(app)
 # Caminho para o banco de dados SQLite dentro da pasta persistente do Render
 db_path = os.path.join(os.getcwd(), 'data', 'meu_banco.db')
 
-# Configuração de logging
-logging.basicConfig(level=logging.DEBUG)
-
 # Função para conectar ao banco de dados SQLite
 def get_db_connection():
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row  # Permite acessar as colunas por nome
-        return conn
-    except sqlite3.Error as e:
-        app.logger.error(f"Erro ao conectar ao banco de dados: {e}")
-        return None
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row  # Permite acessar as colunas por nome
+    return conn
 
 # Rota para obter todos os dados da tabela solo
 @app.route('/api/solo', methods=['GET'])
 def get_solo():
     conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "Erro ao conectar ao banco de dados"}), 500
-    
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM solo")
     dados = [dict(row) for row in cursor.fetchall()]
@@ -40,30 +31,17 @@ def get_solo():
 @app.route('/api/solo', methods=['POST'])
 def add_solo():
     data = request.get_json()
-    app.logger.debug(f"Dados recebidos: {data}")  # Log para verificar os dados recebidos
-
-    # Verificar se todos os campos obrigatórios estão presentes
-    required_fields = ["ph", "umidade", "temperatura", "nitrogenio", "fosforo", "potassio", "microbioma"]
-    if not all(key in data for key in required_fields):
-        return jsonify({"error": "Campos obrigatórios ausentes"}), 400
-
     conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "Erro ao conectar ao banco de dados"}), 500
+    cursor = conn.cursor()
 
-    try:
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO solo (ph, umidade, temperatura, nitrogenio, fosforo, potassio, microbioma)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (data['ph'], data['umidade'], data['temperatura'], data['nitrogenio'], data['fosforo'], data['potassio'], data['microbioma']))
-        conn.commit()
-        conn.close()
-        return jsonify({"message": "Dados inseridos com sucesso"}), 201
-    except Exception as e:
-        conn.close()
-        app.logger.error(f"Erro ao inserir dados: {e}")
-        return jsonify({"error": f"Erro ao inserir dados: {str(e)}"}), 500
+    cursor.execute('''
+        INSERT INTO solo (ph, umidade, temperatura, nitrogenio, fosforo, potassio, microbioma)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (data['ph'], data['umidade'], data['temperatura'], data['nitrogenio'], data['fosforo'], data['potassio'], data['microbioma']))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": "Dados inseridos com sucesso"}), 201
 
 # Rota para obter condições anormais e recomendações
 @app.route('/api/condicoes_anormais', methods=['GET'])
@@ -89,9 +67,6 @@ def get_condicoes_anormais():
     }
 
     conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "Erro ao conectar ao banco de dados"}), 500
-
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM solo")
     dados = [dict(row) for row in cursor.fetchall()]
@@ -115,5 +90,57 @@ def get_condicoes_anormais():
 
     return jsonify(condicoes_anormais)
 
+# Rota para análise estatística dos dados
+@app.route('/api/analise_estatistica', methods=['GET'])
+def analise_estatistica():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM solo")
+    dados = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    if not dados:
+        return jsonify({"message": "Não há dados para análise."}), 404
+
+    df = pd.DataFrame(dados)
+    resumo_estatistico = df.describe().to_dict()
+
+    correlacoes = df.corr(method='pearson').to_dict()
+
+    p_values = {}
+    for col in df.columns[1:]:  # Ignorando a coluna 'id'
+        _, p_value = stats.pearsonr(df['ph'], df[col])
+        p_values[col] = p_value
+
+    return jsonify({
+        "resumo_estatistico": resumo_estatistico,
+        "correlacoes": correlacoes,
+        "p_values": p_values
+    })
+
+# Inicializar a tabela no banco de dados
+def inicializar_banco():
+    if not os.path.exists(os.path.join(os.getcwd(), 'data')):
+        os.makedirs(os.path.join(os.getcwd(), 'data'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS solo (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ph REAL,
+        umidade REAL,
+        temperatura REAL,
+        nitrogenio REAL,
+        fosforo REAL,
+        potassio REAL,
+        microbioma REAL
+    )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Inicialização da aplicação
 if __name__ == '__main__':
+    inicializar_banco()  # Cria a tabela solo caso ainda não exista
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
