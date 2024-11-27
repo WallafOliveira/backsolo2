@@ -3,6 +3,7 @@ from flask_cors import CORS
 import sqlite3
 import os
 import pandas as pd
+from datetime import datetime
 from scipy import stats
 
 app = Flask(__name__)
@@ -34,10 +35,12 @@ def add_solo():
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    data_hora_atual = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
     cursor.execute('''
-        INSERT INTO solo (ph, umidade, temperatura, nitrogenio, fosforo, potassio, microbioma)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (data['ph'], data['umidade'], data['temperatura'], data['nitrogenio'], data['fosforo'], data['potassio'], data['microbioma']))
+        INSERT INTO solo (ph, umidade, temperatura, nitrogenio, fosforo, potassio, microbioma, data_hora)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (data['ph'], data['umidade'], data['temperatura'], data['nitrogenio'], data['fosforo'], data['potassio'], data['microbioma'], data_hora_atual))
     conn.commit()
     conn.close()
 
@@ -88,6 +91,9 @@ def get_condicoes_anormais():
                 "tratamentos": {parametro: tratamentos_recomendados[parametro] for parametro in condicoes.keys()}
             })
 
+    if not condicoes_anormais:
+        return jsonify({"message": "Todos os parâmetros estão dentro da faixa ideal."})
+
     return jsonify(condicoes_anormais)
 
 # Rota para análise estatística dos dados
@@ -113,6 +119,7 @@ def analise_estatistica():
         p_values[col] = p_value
 
     return jsonify({
+        "message": "Análise estatística realizada com sucesso.",
         "resumo_estatistico": resumo_estatistico,
         "correlacoes": correlacoes,
         "p_values": p_values
@@ -134,7 +141,8 @@ def inicializar_banco():
         nitrogenio REAL,
         fosforo REAL,
         potassio REAL,
-        microbioma REAL
+        microbioma REAL,
+        data_hora TEXT
     )
     ''')
     conn.commit()
