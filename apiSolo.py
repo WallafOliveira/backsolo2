@@ -27,8 +27,7 @@ def get_solo():
     dados = [dict(row) for row in cursor.fetchall()]
     conn.close()
 
-    for dado in dados:
-        dado = {k.capitalize(): v for k, v in dado.items()}
+    dados = [{k.capitalize(): v for k, v in dado.items()} for dado in dados]
 
     return jsonify(dados)
 
