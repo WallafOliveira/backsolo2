@@ -27,9 +27,24 @@ def get_solo():
     dados = [dict(row) for row in cursor.fetchall()]
     conn.close()
 
-    dados = [{k.capitalize(): v for k, v in dado.items()} for dado in dados]
+    colunas_mapeadas = {
+        "id": "Id",
+        "ph": "Ph",
+        "umidade": "Umidade",
+        "temperatura": "Temperatura",
+        "nitrogenio": "Nitrogênio",
+        "fosforo": "Fósforo",
+        "potassio": "Potássio",
+        "microbioma": "Microbioma",
+        "data_hora": "Data e Hora"
+    }
 
-    return jsonify(dados)
+    dados_formatados = []
+    for dado in dados:
+        dado_formatado = {colunas_mapeadas[k]: v for k, v in dado.items()}
+        dados_formatados.append(dado_formatado)
+
+    return jsonify(dados_formatados)
 
 # Rota para inserir novos dados do solo no banco de dados
 @app.route('/api/solo', methods=['POST'])
