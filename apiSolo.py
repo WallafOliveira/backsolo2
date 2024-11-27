@@ -26,6 +26,10 @@ def get_solo():
     cursor.execute("SELECT * FROM solo")
     dados = [dict(row) for row in cursor.fetchall()]
     conn.close()
+
+    for dado in dados:
+        dado = {k.capitalize(): v for k, v in dado.items()}
+
     return jsonify(dados)
 
 # Rota para inserir novos dados do solo no banco de dados
